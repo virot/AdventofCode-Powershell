@@ -2,35 +2,39 @@ class IntCodeComputer {
     hidden [System.Collections.ArrayList]$Program = @()
     hidden [int]$ProgramPointer=0
     hidden [System.Collections.ArrayList]$Inputdata = @()
-    [int]$Output
+    [int64]$Output
+    hidden [int]$Relative=0
     [IntComputerStatus]$Status=[IntComputerStatus]::NewlyCreated
 
     IntCodeComputer(){
     }
 
-    IntCodeComputer([int[]]$Program){
+    IntCodeComputer([int64[]]$Program){
             ForEach($Instruction in $Program) {
-            $this.Program.add($Instruction)|Out-Null
+            $this.Program.add([int64]$Instruction)|Out-Null
         }
+        0..1000|ForEach-Object {$this.Program.add([int64]0)|Out-Null}
         $this.Run()
     }
-    IntCodeComputer([int[]]$Program, [int[]]$Inputdata){
+    IntCodeComputer([int64[]]$Program, [int[]]$Inputdata){
         ForEach($Instruction in $Program) {
-            $this.Program.add($Instruction)|Out-Null
+            $this.Program.add([int64]$Instruction)|Out-Null
         }
         ForEach($In in $Inputdata) {
             $this.Inputdata.add($In)|Out-Null
         }
+        0..1000|ForEach-Object {$this.Program.add([int64]0)|Out-Null}
         $this.run()
     }
-    IntCodeComputer([int[]]$Program, [int[]]$Inputdata, [int]$ProgramPointer){
+    IntCodeComputer([int64[]]$Program, [int[]]$Inputdata, [int]$ProgramPointer){
         ForEach($Instruction in $Program) {
-            $this.Program.add($Instruction)|Out-Null
+            $this.Program.add([int64]$Instruction)|Out-Null
         }
         ForEach($In in $Inputdata) {
             $this.Inputdata.add($In)|Out-Null
         }
         $this.ProgramPointer = $ProgramPointer
+        0..1000|ForEach-Object {$this.Program.add([int64]0)|Out-Null}
         $this.run()
     }
 
@@ -42,67 +46,69 @@ class IntCodeComputer {
         $this.run()
     }
 
+    hidden [int64]GetPointerForArgument ([int]$Argument) {
+        if (($this.ProgramPointer + $Argument +1) -gt $this.Program.Count) {throw "Reading outside of memory"}
+        $ParamType = $this.program[$this.ProgramPointer].tostring('00000')[3-$Argument]
+        switch ($ParamType) {
+            '0' {return ($this.program[$this.ProgramPointer+$Argument])}
+            '1' {return ($this.ProgramPointer+$Argument)}
+            '2' {return ($this.Relative+($this.program[$this.ProgramPointer+$Argument]))}
+            default {throw "Not correctly formated Operation"}
+        }
+        return $false
+    }
+
+    hidden [int64]GetValueForArgument ([int]$Argument) {
+        if (($this.ProgramPointer + $Argument +1) -gt $this.Program.Count) {throw "Reading outside of memory"}
+        $ParamType = $this.program[$this.ProgramPointer].tostring('00000')[3-$Argument]
+        switch ($ParamType) {
+            '0' {return ($this.program[$this.program[$this.ProgramPointer+$Argument]])}
+            '1' {return ($this.program[$this.ProgramPointer+$Argument])}
+            '2' {return ($this.program[$this.Relative+$this.program[$this.ProgramPointer+$Argument]])}
+            default {throw "Not correctly formated Operation"}
+        }
+        return $false
+        return $this.program[$this.GetPointerForArgument($Argument)]
+    }
+
     Run ()
     {
         $this.status = [IntComputerStatus]::Running
         $ProofOfLife = 0
-        :program While($ProofOfLife++ -lt 1000 -and $this.ProgramPointer -lt $this.Program.Count){
-            Write-Verbose "debug programPointer=$($this.ProgramPointer), inst=$(($this.ProgramPointer..($this.ProgramPointer+4)|ForEach-Object{$this.program[$_]}) -join ',')"
-            [char]$param1PI = $this.program[$this.ProgramPointer].tostring('00000')[2]
-            [char]$param2PI = $this.program[$this.ProgramPointer].tostring('00000')[1]
-            [char]$param3PI = $this.program[$this.ProgramPointer].tostring('00000')[0]
-#Implement Absolute vaules
-            if (($this.ProgramPointer+1) -ge $this.program.count) {
-                [int]$arg1 = -10000
-            }
-            elseif ($param1PI -eq '0') {
-                [int]$arg1 = $this.program[$this.program[$this.ProgramPointer+1]]
-            }
-            else {
-                [int]$arg1 = $this.program[$this.ProgramPointer+1]
-            }
-            if (($this.ProgramPointer +2) -ge $this.program.count) {
-                [int]$arg2 = -10000
-            }
-            elseif ($param2PI -eq '0') {
-                [int]$arg2 = $this.program[$this.program[$this.ProgramPointer+2]]
-            }
-            else {
-                [int]$arg2 = $this.program[$this.ProgramPointer+2]
-            }
-            if (($this.ProgramPointer +3) -ge $this.program.count) {
-                [int]$arg3 = -100000
-            }
-            elseif ($param3PI -eq '0') {
-                [int]$arg3 = $this.program[$this.program[$this.ProgramPointer +2]]
-            }
-            else {
-                [int]$arg3 = $this.program[$this.ProgramPointer +2]
-            }
-            Write-Verbose "INST: $($this.program[$this.ProgramPointer] % 100) ARGS: $arg1, $arg2, $arg3, DIRECT: $param1PI,$param2PI,$param3PI"
+        :program While($ProofOfLife++ -lt 100000 -and $this.ProgramPointer -lt $this.Program.Count){
+            Write-verbose "$($this.programpointer.tostring('0000')) debug inst=$(($this.ProgramPointer..($this.ProgramPointer+4)|ForEach-Object{$this.program[$_]}) -join ','), PRoof:$ProofOfLife, Rel:$($this.Relative)"
 #Main program
             switch ($this.program[$this.ProgramPointer] % 100)
             {
                 1   {
+                    $arg1 = $this.GetValueForArgument(1)
+                    $arg1_p = $this.GetPointerForArgument(1)
+                    $arg2 = $this.GetValueForArgument(2)
+                    $arg2_p = $this.GetPointerForArgument(2)
+                    $arg3_p = $this.GetPointerForArgument(3)
                     $DestinationPointer = $this.program[$this.ProgramPointer+3]
-                    Write-Verbose "$($this.ProgramPointer.tostring('0000')): ADD $($arg1) + $($arg2) DST: $($DestinationPointer)"
-                    $this.Program[$DestinationPointer]= ($arg1 + $arg2)
+                    Write-verbose "$($this.ProgramPointer.tostring('0000')): $($arg1) ($arg1_p) + $($arg2) ($arg2_p)= ($($arg3_p))"
+                    $this.Program[$arg3_p]= ($arg1 + $arg2)
                     $this.ProgramPointer += 4
                 }
                 2   {
+                    $arg1 = $this.GetValueForArgument(1)
+                    $arg1_p = $this.GetPointerForArgument(1)
+                    $arg2 = $this.GetValueForArgument(2)
+                    $arg2_p = $this.GetPointerForArgument(2)
+                    $arg3_p = $this.GetPointerForArgument(3)
                     $DestinationPointer = $this.program[$this.ProgramPointer+3]
-                    Write-Verbose "$($this.ProgramPointer.tostring('0000')): MUL $($arg1) * $($arg2) DST: $($DestinationPointer)"
-                    $this.program[$DestinationPointer] = $arg1 * $arg2
+                    Write-verbose "$($this.ProgramPointer.tostring('0000')): $($arg1) ($arg1_p) x $($arg2) ($arg2_p)= ($($arg3_p))"
+                    $this.program[$arg3_p] = $arg1 * $arg2
                     $this.ProgramPointer += 4
                 }
-                # 3 - Input
+# 3 - Input
                 3   {
-                    write-verbose "$($this.inputdata.count) counter for input"
                     if ($this.Inputdata.count -ge 1)
                     {
-                        $DestinationPointer = $this.program[$this.ProgramPointer+1]
-                        write-Verbose "Input POINT:$DestinationPointer => OLD:$($this.program[$DestinationPointer]) NEW:$($this.inputdata[0])"
-                        $this.program[$DestinationPointer] = $this.inputdata[0] #$invalue[$inputcounter]
+                        $arg1_p = $this.GetPointerForArgument(1)
+                        Write-Verbose "($this.programpointer.tostring('0000')): INPUT $arg1_p => OLD:$($this.program[$arg1_p]) NEW:$($this.inputdata[0])"
+                        $this.program[$arg1_p] = $this.inputdata[0]
                         $this.inputdata.RemoveAt(0)
                         $this.ProgramPointer += 2
                     }
@@ -111,47 +117,63 @@ class IntCodeComputer {
                         break program
                     }
                 }
-                # 4 - Output
+# 4 - Output
                 4   {
+                    $arg1 = $this.GetValueForArgument(1)
+                    $arg1_p = $this.GetPointerForArgument(1)
                     $SourcePointer = $this.program[$this.ProgramPointer+1]
-                    Write-Verbose "Output ($($SourcePointer)) $($this.program[$SourcePointer])"
+                    Write-verbose "($this.programpointer.tostring('0000')): Output ($($arg1_p)) $($arg1)"
                     $this.ProgramPointer += 2
                     $this.status = [IntComputerStatus]::OutputAvailable
-                    $this.Output = $($this.program[$SourcePointer])
+                    $this.Output = $arg1
                     break program
                 }
+# 5 - Jump on Non Zero
                 5   {
-                    Write-Verbose "$($this.ProgramPointer.tostring('0000')): JumpNonZero $arg1, $arg2"
+                    $arg1 = $this.GetValueForArgument(1)
+                    $arg1_p = $this.GetPointerForArgument(1)
+                    $arg2 = $this.GetValueForArgument(2)
+                    Write-verbose "$($this.ProgramPointer.tostring('0000')): JumpOnNonZero $arg1 ($arg1_p) DEST: $arg2"
                     if ($arg1 -ne 0){$this.ProgramPointer = $arg2}else{$this.ProgramPointer+=3}
 
                 }
+# 6 - Jump on Zero
                 6   {
-                    Write-Verbose "$($this.programpointer.tostring('0000')): JumpZero $arg1, $arg2"
+                    $arg1 = $this.GetValueForArgument(1)
+                    $arg1_p = $this.GetPointerForArgument(1)
+                    $arg2 = $this.GetValueForArgument(2)
+                    $arg2_p = $this.GetPointerForArgument(2)
+                    $arg3_p = $this.GetPointerForArgument(3)
+                    Write-verbose "$($this.programpointer.tostring('0000')): JumpOnZero $arg1 ($arg1_p) DEST: $arg2"
                     if ($arg1 -eq 0){$this.ProgramPointer = $arg2}else{$this.ProgramPointer+=3}
                 }
                 7   {
+                    $arg1 = $this.GetValueForArgument(1)
+                    $arg1_p = $this.GetPointerForArgument(1)
+                    $arg2 = $this.GetValueForArgument(2)
+                    $arg2_p = $this.GetPointerForArgument(2)
+                    $arg3_p = $this.GetPointerForArgument(3)
                     $DestinationPointer = $this.program[$this.ProgramPointer+3]
-                    Write-Verbose "$($this.programpointer.tostring('0000')): LT $arg1, $arg2"
-                    if ($arg1 -lt $arg2){
-                    $this.program[$DestinationPointer] = 1
-                    }
-                    else
-                    {
-                    $this.program[$DestinationPointer] = 0
-                    }
+                    Write-verbose "$($this.programpointer.tostring('0000')): $arg1 ($arg1_p) -lt $arg2 ($arg2_p), ($arg3_p)=$([int]($arg1 -lt $arg2))"
+                    $this.program[$arg3_p] = [int]($arg1 -lt $arg2)
                     $this.ProgramPointer += 4
                 }
                 8 {
-                    $DestinationPointer = $this.program[$this.ProgramPointer+3]
-                    Write-Verbose "$($this.programpointer.tostring('0000')): EQ $arg1, $arg2, DEST=$DestinationPointer"
-                    if ($arg1 -eq $arg2){
-                    $this.program[$this.program[$this.ProgramPointer+3]] = 1
-                    }
-                    else
-                    {
-                    $this.program[$this.program[$this.ProgramPointer+3]] = 0
-                    }
+                    $arg1 = $this.GetValueForArgument(1)
+                    $arg1_p = $this.GetPointerForArgument(1)
+                    $arg2 = $this.GetValueForArgument(2)
+                    $arg2_p = $this.GetPointerForArgument(2)
+                    $arg3_p = $this.GetPointerForArgument(3)
+                    Write-verbose "$($this.programpointer.tostring('0000')): $arg1 ($arg1_p) -eq $arg2 ($arg2_p), ($arg3_p)=$([int]($arg1 -eq $arg2))"
+                    $this.program[$arg3_p] = [int]($arg1 -eq $arg2)
                     $this.ProgramPointer += 4
+                }
+# 9 - Change Relative mode
+                9   {
+                    $arg1 = $this.GetValueForArgument(1)
+                    Write-verbose "$($this.programpointer.tostring('0000')): Change relative pointer $($this.Relative) - $arg1 =$($this.Relative + $arg1)"
+                    $this.Relative += $this.GetValueForArgument(1)
+                    $this.ProgramPointer += 2
                 }
                 #99 - End program
                 99 {
@@ -178,24 +200,3 @@ enum IntComputerStatus{
   NewlyCreated = -2
   Running = 3
 }
-
-#$test = [IntCodeComputer]::new(@(1,9,10,3,2,3,11,0,99,30,40,50))
-
-#$Test = [IntCodeComputer]::new(@(3,9,8,9,10,9,4,9,99,-1,8))
-#$Test.AddInput(8)
-#$Test.status
-#$Test.Output
-#$Test = [IntCodeComputer]::new(@(3,9,8,9,10,9,4,9,99,-1,8),@(9))
-#$Test.Output
-$Test = [IntCodeComputer]::new(@(3,3,1107,-1,8,3,4,3,99),@(7))
-$Test.Output
-$Test = [IntCodeComputer]::new(@(3,3,1108,-1,8,3,4,3,99),@(9))
-$Test.Output
-$Test.Status
-$test.run()
-$test.status
-#$Test.Program
-
-
-#[IntCodeComputer]::new
-#$test.ProgramPointer
